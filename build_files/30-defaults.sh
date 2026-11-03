@@ -34,14 +34,17 @@ KEY="/etc/pki/containers/${IMAGE_NAME}.pub"
 
 install -Dm0644 "${CTX}/../cosign.pub" "${KEY}"
 
+# Fedora ships the default in /usr/share; /etc overrides it if present.
 POLICY=/etc/containers/policy.json
+SRC="${POLICY}"
+[ -f "${SRC}" ] || SRC=/usr/share/containers/policy.json
 jq --arg repo "${REPO}" --arg key "${KEY}" \
    '.transports.docker[$repo] = [{
         "type": "sigstoreSigned",
         "keyPath": $key,
         "signedIdentity": {"type": "matchRepository"}
-    }]' "${POLICY}" > /tmp/policy.json
-install -m0644 /tmp/policy.json "${POLICY}"
+    }]' "${SRC}" > /tmp/policy.json
+install -Dm0644 /tmp/policy.json "${POLICY}"
 
 install -d /etc/containers/registries.d
 cat > "/etc/containers/registries.d/${IMAGE_NAME}.yaml" <<EOF
