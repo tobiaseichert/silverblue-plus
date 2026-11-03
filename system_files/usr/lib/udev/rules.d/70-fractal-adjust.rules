@@ -1,0 +1,7 @@
+# Fractal Design Adjust devices (Radius RGB AIO, Adjust Pro Hub, Scape):
+# let the logged-in user reach them via WebHID in a Chromium-based browser
+# (https://adjust.fractal-design.com). Vendor ID from Fractal's Linux guide.
+# "uaccess" grants access to the active session user, no plugdev group needed.
+# Must sort before 73-seat-late.rules, hence the 70- prefix.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="36bc", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="36bc", TAG+="uaccess"

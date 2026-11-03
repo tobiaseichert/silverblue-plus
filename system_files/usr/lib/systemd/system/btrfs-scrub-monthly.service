@@ -1,0 +1,14 @@
+[Unit]
+Description=Btrfs scrub (checksum check of all data and metadata)
+Documentation=man:btrfs-scrub(8)
+
+[Service]
+Type=oneshot
+# Only run if the system is on Btrfs. /var is a writable mount of the same
+# filesystem (/sysroot is read-only); a scrub always covers the whole
+# filesystem, all subvolumes included.
+ExecCondition=/usr/bin/sh -c '[ "$(stat -f -c %%T /var)" = btrfs ]'
+ExecStart=/usr/sbin/btrfs scrub start -B -c 3 /var
+# Stay out of the way: idle I/O priority, lowest CPU priority
+IOSchedulingClass=idle
+Nice=19

@@ -1,0 +1,101 @@
+name: build-image
+
+on:
+  schedule:
+    - cron: "20 4 * * *" # daily, picks up new Silverblue base + RPM Fusion updates
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FEDORA_VERSION: "45"
+  IMAGE_DESC: "Fedora Silverblue + RPM Fusion media & gaming addons"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Prepare names and tags
+        id: meta
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          NAME="${GITHUB_REPOSITORY#*/}"
+          NAME="${NAME,,}"
+          DATE="$(date -u +%Y%m%d)"
+          echo "registry=ghcr.io/${OWNER}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${OWNER}/${NAME}" >> "$GITHUB_OUTPUT"
+          echo "tags=latest ${FEDORA_VERSION} ${FEDORA_VERSION}-${DATE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          sudo podman build \
+            --pull=always \
+            --build-arg FEDORA_VERSION="${FEDORA_VERSION}" \
+            --build-arg IMAGE_REGISTRY="${{ steps.meta.outputs.registry }}" \
+            --build-arg IMAGE_NAME="${{ steps.meta.outputs.name }}" \
+            --label org.opencontainers.image.title="${{ steps.meta.outputs.name }}" \
+            --label org.opencontainers.image.description="${IMAGE_DESC}" \
+            --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}" \
+            --label org.opencontainers.image.version="${FEDORA_VERSION}.$(date -u +%Y%m%d)" \
+            --label containers.bootc=1 \
+            --tag "${{ steps.meta.outputs.image }}:build" \
+            -f Containerfile .
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push
+        id: push
+        if: github.event_name != 'pull_request'
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            sudo podman tag "${IMAGE}:build" "${IMAGE}:${tag}"
+            sudo podman push --digestfile /tmp/digest "${IMAGE}:${tag}"
+          done
+          echo "digest=$(cat /tmp/digest)" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+        run: |
+          if [ -z "${COSIGN_PRIVATE_KEY}" ]; then
+            echo "::error::SIGNING_SECRET is not set - see README"; exit 1
+          fi
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            "${{ steps.meta.outputs.image }}@${{ steps.push.outputs.digest }}"

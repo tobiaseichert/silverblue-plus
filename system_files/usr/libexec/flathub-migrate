@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# One-time migration: make Flathub the only Flatpak source.
+#  1. add/enable Flathub
+#  2. reinstall every app that came from Fedora's remote from Flathub
+#     (app data in ~/.var/app is kept)
+#  3. remove the Fedora runtime and the Fedora remotes
+#  4. install a few default apps from Flathub (only once; uninstalling
+#     them later is respected)
+# Any failure (e.g. no network yet) exits non-zero -> systemd retries.
+# Fedora's remote is only removed once nothing installed depends on it.
+set -euo pipefail
+
+STAMP=/var/lib/silverblue-plus/flathub-migrate.done
+
+# Default Flathub apps installed on first boot
+DEFAULT_APPS=(
+    io.github.kolunmi.Bazaar          # Flatpak app store (alongside GNOME Software)
+    io.missioncenter.MissionCenter    # System monitor incl. GPU
+    org.gnome.World.PikaBackup        # Backups (Borg) to external drive/NAS
+    org.chromium.Chromium             # WebHID tools (e.g. Fractal Adjust), Chromium testing
+    org.gnome.Boxes                   # Virtual machines (bundles its own QEMU)
+    net.lutris.Lutris                 # Game launcher (GOG, Epic, Wine/Proton runners)
+    io.github.flattool.Warehouse      # Manage Flatpaks, data and leftovers
+)
+[[ -e "${STAMP}" ]] && exit 0
+
+flatpak remote-add --system --if-not-exists flathub \
+    https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-modify --system --enable flathub
+
+# Fails without network, so we never misread "offline" as "not on Flathub"
+flatpak update --system --appstream flathub
+
+fedora_refs() {
+    flatpak list --system --columns=application,origin "$@" \
+        | awk -F'\t' '$2 ~ /^fedora/ {print $1}'
+}
+
+keep_fedora=0
+while read -r app; do
+    [[ -z "${app}" ]] && continue
+    if flatpak remote-info --system flathub "app/${app}/x86_64/stable" >/dev/null 2>&1; then
+        echo "Reinstalling ${app} from Flathub"
+        flatpak install --system --noninteractive --assumeyes --reinstall flathub "${app}"
+    else
+        echo "${app} is not on Flathub, keeping the Fedora build"
+        keep_fedora=1
+    fi
+done < <(fedora_refs --app)
+
+flatpak uninstall --system --unused --noninteractive --assumeyes
+
+if [[ "${keep_fedora}" -eq 0 && -z "$(fedora_refs)" ]]; then
+    for remote in fedora fedora-testing; do
+        if flatpak remotes --system --columns=name | grep -qx "${remote}"; then
+            flatpak remote-delete --system "${remote}"
+        fi
+    done
+else
+    echo "Some refs still come from Fedora's remote; leaving it in place."
+fi
+
+# --or-update: no error if an app is already installed (e.g. migrated above)
+flatpak install --system --noninteractive --assumeyes --or-update flathub "${DEFAULT_APPS[@]}"
+
+mkdir -p "$(dirname "${STAMP}")"
+touch "${STAMP}"

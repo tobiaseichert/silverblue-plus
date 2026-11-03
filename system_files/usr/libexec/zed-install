@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Installs Zed with its official script into ~/.local on a user's first
+# login. Zed updates itself afterwards. Removing ~/.local/state/zed-install.done
+# re-runs it; deleting Zed with `zed --uninstall` is respected.
+set -euo pipefail
+
+STAMP="${XDG_STATE_HOME:-$HOME/.local/state}/zed-install.done"
+[[ -e "${STAMP}" ]] && exit 0
+
+if [[ ! -x "$HOME/.local/bin/zed" ]]; then
+    curl -fsSL https://zed.dev/install.sh | sh
+fi
+
+mkdir -p "$(dirname "${STAMP}")"
+touch "${STAMP}"

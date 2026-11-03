@@ -1,0 +1,16 @@
+[Unit]
+Description=Switch to Flathub and install default apps (one-time)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/var/lib/silverblue-plus/flathub-migrate.done
+# Keep retrying until it succeeds (e.g. Wi-Fi only comes up after login)
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/flathub-migrate
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

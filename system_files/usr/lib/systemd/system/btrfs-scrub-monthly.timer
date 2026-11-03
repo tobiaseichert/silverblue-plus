@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly Btrfs scrub
+
+[Timer]
+OnCalendar=monthly
+RandomizedDelaySec=1h
+# Catch up after boot if the PC was off at the scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target

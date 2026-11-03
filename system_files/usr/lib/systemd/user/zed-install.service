@@ -1,0 +1,14 @@
+[Unit]
+Description=Install Zed editor with the official script (one-time per user)
+ConditionPathExists=!%h/.local/state/zed-install.done
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/zed-install
+# No network yet after login (e.g. Wi-Fi still connecting) -> try again
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
