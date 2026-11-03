@@ -15,9 +15,8 @@ systemctl enable rpm-ostreed-automatic.timer
 # --- Monthly Btrfs scrub (finds silent data corruption early)
 systemctl enable btrfs-scrub-monthly.timer
 
-# --- Homebrew (one-time setup at boot) and Zed (official script, per user
-#     on first login). git is needed by brew.
-dnf5 -y install git-core
+# --- Homebrew (unpacked at first boot, see 28-homebrew.sh) and Zed
+#     (official script, per user on first login)
 chmod 0755 /usr/libexec/brew-setup /usr/libexec/zed-install
 systemctl enable brew-setup.service
 systemctl --global enable zed-install.service

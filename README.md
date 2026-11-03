@@ -23,14 +23,17 @@ No Steam Gaming Mode, same GNOME as Silverblue.
 Neither can live in the image (`/home` is per machine), so two one-time
 services set them up on the installed system:
 
-- `brew-setup.service` (boot, root): clones Homebrew to
-  `/home/linuxbrew/.linuxbrew` and hands it to UID 1000, the first user.
+- `brew-setup.service` (boot, root): unpacks the Homebrew snapshot baked into
+  the image (`/usr/share/homebrew.tar.zst`, built daily with Homebrew's
+  official installer) to `/home/linuxbrew/.linuxbrew` and hands it to UID
+  1000, the first user. No network needed; an existing install is kept.
   `/etc/profile.d/brew.sh` puts `brew` on the `PATH`. Use it for CLI
   toolchains (Go, Node, kubectl …) or `brew bundle` with your Mac `Brewfile`.
 - `zed-install.service` (user, first login): runs Zed's official
-  `install.sh` into `~/.local`. Zed updates itself.
+  `install.sh` into `~/.local`. Zed updates itself. Retries every minute
+  until the network is up.
 
-Both retry every minute until the network is up. Logs:
+Logs:
 `journalctl -u brew-setup` and `journalctl --user -u zed-install`.
 
 ### 1Password

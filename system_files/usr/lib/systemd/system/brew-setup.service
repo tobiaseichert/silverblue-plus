@@ -1,15 +1,12 @@
 [Unit]
 Description=Set up Homebrew in /home/linuxbrew (one-time)
-Wants=network-online.target
-After=network-online.target
+After=local-fs.target
 ConditionPathExists=!/var/lib/silverblue-plus/brew-setup.done
-StartLimitIntervalSec=0
+ConditionPathExists=/usr/share/homebrew.tar.zst
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/brew-setup
-Restart=on-failure
-RestartSec=60
 
 [Install]
 WantedBy=multi-user.target
