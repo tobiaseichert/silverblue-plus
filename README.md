@@ -9,10 +9,10 @@ No Steam Gaming Mode, same GNOME as Silverblue.
 
 | Area | Content |
 |---|---|
-| Repos | RPM Fusion free, nonfree, nonfree-steam (+ 1Password's repo at build time only) |
+| Repos | RPM Fusion free, nonfree, nonfree-steam and 1Password's repo, at build time only (not left on the system) |
 | Apps | 1Password desktop app + `op` CLI (works with the preinstalled Firefox RPM) |
 | Codecs | full `ffmpeg`, GStreamer libav/bad-freeworld/ugly |
-| HW video | `mesa-va-drivers-freeworld` (H.264/HEVC on AMD) |
+| HW video | `mesa-va-drivers-freeworld` (H.264/HEVC on AMD); skipped for a day if RPM Fusion's build doesn't match Fedora's Mesa yet (warning in the build log) |
 | Gaming | `steam`, `steam-devices`, `gamescope`, `mangohud` (+ i686) |
 | Shell & CLI | `zsh`, `vim`, `btop`, `duf`, `fastfetch`, `glow`, `gum`, `lsb_release`; archives: `lzip`, 7-Zip, `unrar` (RPM Fusion); `fuse-libs` for AppImages |
 | Tools | `distrobox`, `libva-utils`, `vulkan-tools`, `ddcutil` (monitor control via DDC/CI), `nvtop` (GPU monitor), `compsize` (Btrfs on-disk size), Btrfs Assistant |
