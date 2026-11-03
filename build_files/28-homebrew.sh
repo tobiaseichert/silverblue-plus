@@ -12,7 +12,10 @@ dnf5 -y install git-core zstd
 curl --retry 3 -fsSLo /tmp/brew-install \
     https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
 touch /.dockerenv
-mkdir -p /home/linuxbrew
+# /home is a symlink to /var/home, which doesn't exist at build time
+HOMEDIR="$(realpath -m /home)"
+[ -d "${HOMEDIR}" ] && NEW_HOMEDIR="" || NEW_HOMEDIR="${HOMEDIR}"
+mkdir -p "${HOMEDIR}/linuxbrew"
 env -i PATH=/usr/bin:/usr/sbin HOME=/tmp/brew-home NONINTERACTIVE=1 \
     bash /tmp/brew-install
 env -i PATH=/usr/bin:/usr/sbin HOME=/tmp/brew-home \
@@ -20,7 +23,8 @@ env -i PATH=/usr/bin:/usr/sbin HOME=/tmp/brew-home \
 rm -f /.dockerenv
 
 # Archive relative to /home/linuxbrew, so unpacking never touches the /home
-# symlink. Then remove the build copy (/home is /var/home, not part of the image).
+# symlink. Then remove the build copy (/var/home is not part of the image).
 tar --zstd -C /home/linuxbrew -cf /usr/share/homebrew.tar.zst .linuxbrew
-rm -rf /home/linuxbrew
+rm -rf "${HOMEDIR}/linuxbrew"
+[ -z "${NEW_HOMEDIR}" ] || rmdir "${NEW_HOMEDIR}"
 ls -lh /usr/share/homebrew.tar.zst
