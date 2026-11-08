@@ -9,12 +9,15 @@
 #  - The "onepassword" group gets a fixed GID and a sysusers.d entry, so it
 #    exists on the deployed system and matches the file ownership in the image
 #    (BrowserSupport is setgid onepassword). Same for "onepassword-cli",
-#    which owns the setgid `op` CLI.
+#    which owns the setgid `op` CLI, and "onepassword-mcp", which owns the
+#    setgid 1password-mcp server (1Password checks the group of connecting
+#    peers via SO_PEERCRED).
 #  - The repo file is removed after install: updates come with the image.
 set -euxo pipefail
 
 GID_ONEPASSWORD=1500
 GID_ONEPASSWORD_CLI=1600
+GID_ONEPASSWORD_MCP=1700
 
 # Package signing key (Fedora 45 enforces RPM signatures)
 rpmkeys --import https://downloads.1password.com/linux/keys/1password.asc
@@ -32,6 +35,7 @@ EOF
 # Pre-create the groups with fixed GIDs; the RPM scriptlets reuse them
 groupadd -g "${GID_ONEPASSWORD}" onepassword
 groupadd -g "${GID_ONEPASSWORD_CLI}" onepassword-cli
+groupadd -g "${GID_ONEPASSWORD_MCP}" onepassword-mcp
 
 # /opt -> /var/opt only exists at runtime; give the RPM somewhere to write
 mkdir -p /var/opt
@@ -50,6 +54,7 @@ EOF
 cat > /usr/lib/sysusers.d/onepassword.conf <<EOF
 g onepassword ${GID_ONEPASSWORD}
 g onepassword-cli ${GID_ONEPASSWORD_CLI}
+g onepassword-mcp ${GID_ONEPASSWORD_MCP}
 EOF
 
 # Sanity checks: launcher symlink and setgid helper survived the move
@@ -57,5 +62,7 @@ test -x /usr/lib/1Password/1password
 stat -c '%A %G' /usr/lib/1Password/1Password-BrowserSupport | grep -q '^-..x..s... onepassword$'
 # op is setgid onepassword-cli (needed for the desktop-app integration)
 stat -c '%A %G' /usr/bin/op | grep -q '^-..x..s... onepassword-cli$'
+# The MCP server is setgid onepassword-mcp
+stat -c '%A %G' /usr/lib/1Password/1password-mcp | grep -q '^-..x..s... onepassword-mcp$'
 
 rm -f /etc/yum.repos.d/1password.repo

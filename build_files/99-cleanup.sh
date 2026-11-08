@@ -11,3 +11,6 @@ test -z "$(ls /etc/yum.repos.d/rpmfusion-* 2>/dev/null)"
 
 dnf5 clean all
 rm -rf /var/lib/dnf
+
+# /run is a tmpfs at runtime; drop what dnf and SELinux left there during the build
+rm -rf /run/dnf /run/setrans
