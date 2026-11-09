@@ -38,8 +38,8 @@ carries the current release; the repo itself is not left on the system.
 Browser integration needs a native browser, so Firefox stays the Fedora RPM.
 Because `/opt` lives in `/var` on atomic systems, the app is moved to
 `/usr/lib/1Password` and linked back to `/opt/1Password` at boot. The
-`onepassword` (1500) and `onepassword-cli` (1600) groups have fixed GIDs via
-`sysusers.d`.
+`onepassword` (1500), `onepassword-cli` (1600) and `onepassword-mcp` (1700)
+groups have fixed GIDs via `sysusers.d`.
 
 ### Flathub-only Flatpaks
 
