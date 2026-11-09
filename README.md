@@ -51,7 +51,8 @@ LibreOffice, …) on the system as Flatpaks from Fedora's remote.
 2. reinstalls every Fedora-remote app from Flathub (app data is kept),
 3. removes the Fedora runtime and the `fedora` / `fedora-testing` remotes,
 4. installs Bazaar (app store, alongside GNOME Software), Mission Center
-   (system monitor with GPU stats), Pika Backup, Chromium, GNOME Boxes, Lutris and Warehouse from Flathub,
+   (system monitor with GPU stats), Pika Backup, Chromium, GNOME Boxes,
+   Faugus Launcher and Warehouse from Flathub,
 5. writes `/var/lib/silverblue-plus/flathub-migrate.done` and never runs again.
 
 If it fails (e.g. offline) it retries every minute. If an app is not on

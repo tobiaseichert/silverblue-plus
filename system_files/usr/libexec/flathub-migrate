@@ -19,7 +19,7 @@ DEFAULT_APPS=(
     org.gnome.World.PikaBackup        # Backups (Borg) to external drive/NAS
     org.chromium.Chromium             # WebHID tools (e.g. Fractal Adjust), Chromium testing
     org.gnome.Boxes                   # Virtual machines (bundles its own QEMU)
-    net.lutris.Lutris                 # Game launcher (GOG, Epic, Wine/Proton runners)
+    io.github.Faugus.faugus-launcher  # Windows games via Proton (UMU), prefixes, Steam shortcuts
     io.github.flattool.Warehouse      # Manage Flatpaks, data and leftovers
 )
 [[ -e "${STAMP}" ]] && exit 0
