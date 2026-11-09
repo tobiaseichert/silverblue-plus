@@ -35,12 +35,23 @@ install -Dm0644 "${CTX}/../cosign.pub" "${KEY}"
 POLICY=/etc/containers/policy.json
 SRC="${POLICY}"
 [ -f "${SRC}" ] || SRC=/usr/share/containers/policy.json
+# rpm-ostree/bootc refuse signed pulls (ostree-image-signed) while the
+# *default* rule is insecureAcceptAnything, even with a rule for our repo.
+# So: default = reject, plus a transport-wide "" rule that keeps accepting
+# everything else (podman, toolbox, distrobox behave as before). More
+# specific scopes (our repo, Red Hat's registries) still require signatures.
 jq --arg repo "${REPO}" --arg key "${KEY}" \
-   '.transports.docker[$repo] = [{
+   '.default = [{"type": "reject"}]
+    | .transports.docker[$repo] = [{
         "type": "sigstoreSigned",
         "keyPath": $key,
         "signedIdentity": {"type": "matchRepository"}
-    }]' "${SRC}" > /tmp/policy.json
+    }]
+    | reduce ("docker", "docker-archive", "docker-daemon", "containers-storage",
+              "oci", "oci-archive", "dir") as $t
+        (.; .transports[$t][""] //= [{"type": "insecureAcceptAnything"}])' \
+   "${SRC}" > /tmp/policy.json
+jq -e '.default[0].type == "reject"' /tmp/policy.json >/dev/null
 install -Dm0644 /tmp/policy.json "${POLICY}"
 
 install -d /etc/containers/registries.d
