@@ -15,10 +15,8 @@ systemctl enable rpm-ostreed-automatic.timer
 # --- Monthly Btrfs scrub (finds silent data corruption early)
 systemctl enable btrfs-scrub-monthly.timer
 
-# --- Homebrew (unpacked at first boot, see 28-homebrew.sh) and Zed
-#     (official script, per user on first login)
-chmod 0755 /usr/libexec/brew-setup /usr/libexec/zed-install
-systemctl enable brew-setup.service
+# --- Zed (official script, per user on first login)
+chmod 0755 /usr/libexec/zed-install
 systemctl --global enable zed-install.service
 
 # --- Flatpak: one-time switch from Fedora's remote to Flathub
