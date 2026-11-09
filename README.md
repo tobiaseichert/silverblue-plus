@@ -111,8 +111,6 @@ podman build -t silverblue-plus:test .
 
 ## Next steps worth considering
 
-- **Rechunking** (`rpm-ostree compose build-chunked-oci`) for much smaller update
-  downloads.
 - **ISO** via `bootc-image-builder` for fresh installs.
 - **Flatpaks** (Heroic for GOG/Epic, ProtonPlus, Flatseal) stay Flatpaks
   rather than going into the image.

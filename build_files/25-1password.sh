@@ -46,6 +46,10 @@ dnf5 -y install 1password 1password-cli
 mv /var/opt/1Password /usr/lib/1Password
 rmdir /var/opt || true
 
+# rpm no longer owns the moved files; tag them so rechunking (see the build
+# workflow) puts them in their own layer and not the catch-all layer
+find /usr/lib/1Password ! -type l -exec setfattr -n user.component -v 1password {} +
+
 cat > /usr/lib/tmpfiles.d/onepassword.conf <<'EOF'
 d /var/opt 0755 root root -
 L /opt/1Password - - - - /usr/lib/1Password
