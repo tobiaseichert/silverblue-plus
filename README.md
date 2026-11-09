@@ -48,17 +48,20 @@ LibreOffice, …) on the system as Flatpaks from Fedora's remote.
 `flathub-migrate.service` runs once after the first boot with network:
 
 1. adds and enables Flathub,
-2. reinstalls every Fedora-remote app from Flathub (app data is kept),
+2. moves every Fedora-remote app to Flathub (app data is kept),
 3. removes the Fedora runtime and the `fedora` / `fedora-testing` remotes,
 4. installs Bazaar (app store, alongside GNOME Software), Mission Center
    (system monitor with GPU stats), Pika Backup, Chromium, GNOME Boxes,
    Faugus Launcher and Warehouse from Flathub,
 5. writes `/var/lib/silverblue-plus/flathub-migrate.done` and never runs again.
 
-If it fails (e.g. offline) it retries every minute. If an app is not on
-Flathub, the Fedora build and remote are kept. Check progress with
-`journalctl -u flathub-migrate`. When GNOME's first-boot setup asks about
-third-party repositories, choose **Enable** so Flathub stays switched on.
+While offline it retries every minute. If single apps fail to install, the
+others still go ahead; the run is retried up to 5 times, then the failed apps
+are listed in the log and the migration ends. If an app is not on Flathub (or
+can't be installed from there), the Fedora build and remote are kept. Check
+progress with `journalctl -u flathub-migrate`. When GNOME's first-boot setup
+asks about third-party repositories, choose **Enable** so Flathub stays
+switched on.
 
 ## Setup (one time)
 

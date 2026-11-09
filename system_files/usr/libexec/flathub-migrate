@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # One-time migration: make Flathub the only Flatpak source.
 #  1. add/enable Flathub
-#  2. reinstall every app that came from Fedora's remote from Flathub
+#  2. move every app that came from Fedora's remote to Flathub
 #     (app data in ~/.var/app is kept)
 #  3. remove the Fedora runtime and the Fedora remotes
 #  4. install a few default apps from Flathub (only once; uninstalling
 #     them later is respected)
-# Any failure (e.g. no network yet) exits non-zero -> systemd retries.
+# No network yet -> exit non-zero, systemd retries every minute.
+# Single apps that fail don't stop the rest; the run is retried a few
+# times (MAX_RUNS), then the failures are logged and the migration ends.
 # Fedora's remote is only removed once nothing installed depends on it.
 set -euo pipefail
 
-STAMP=/var/lib/silverblue-plus/flathub-migrate.done
+STATE=/var/lib/silverblue-plus
+STAMP="${STATE}/flathub-migrate.done"
+RUNS="${STATE}/flathub-migrate.runs"
+MAX_RUNS=5
 
 # Default Flathub apps installed on first boot
 DEFAULT_APPS=(
@@ -24,11 +29,14 @@ DEFAULT_APPS=(
 )
 [[ -e "${STAMP}" ]] && exit 0
 
+FP=(flatpak --system --noninteractive --assumeyes)
+
 flatpak remote-add --system --if-not-exists flathub \
     https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak remote-modify --system --enable flathub
 
-# Fails without network, so we never misread "offline" as "not on Flathub"
+# Fails without network, so we never misread "offline" as "not on Flathub".
+# Offline runs don't count towards MAX_RUNS.
 flatpak update --system --appstream flathub
 
 fedora_refs() {
@@ -36,19 +44,36 @@ fedora_refs() {
         | awk -F'\t' '$2 ~ /^fedora/ {print $1}'
 }
 
+failed=()
 keep_fedora=0
-while read -r app; do
+
+mapfile -t fedora_apps < <(fedora_refs --app)
+for app in "${fedora_apps[@]}"; do
     [[ -z "${app}" ]] && continue
-    if flatpak remote-info --system flathub "app/${app}/x86_64/stable" >/dev/null 2>&1; then
-        echo "Reinstalling ${app} from Flathub"
-        flatpak install --system --noninteractive --assumeyes --reinstall flathub "${app}"
-    else
+    if ! flatpak remote-info --system flathub "app/${app}/x86_64/stable" >/dev/null 2>&1; then
         echo "${app} is not on Flathub, keeping the Fedora build"
         keep_fedora=1
+        continue
     fi
-done < <(fedora_refs --app)
+    # Uninstall + install, not --reinstall: flatpak refuses to switch when
+    # Flathub's build is older than Fedora's ("Update is older than current
+    # version"). Uninstalling without --delete-data keeps ~/.var/app.
+    echo "Moving ${app} from Fedora's remote to Flathub"
+    origin="$(flatpak info --system --show-origin "${app}")"
+    if ! "${FP[@]}" uninstall "${app}"; then
+        failed+=("${app}")
+        keep_fedora=1
+        continue
+    fi
+    if ! "${FP[@]}" install flathub "${app}"; then
+        echo "Installing ${app} from Flathub failed, restoring the Fedora build"
+        "${FP[@]}" install "${origin}" "${app}" || true
+        failed+=("${app}")
+        keep_fedora=1
+    fi
+done
 
-flatpak uninstall --system --unused --noninteractive --assumeyes
+"${FP[@]}" uninstall --unused || true
 
 if [[ "${keep_fedora}" -eq 0 && -z "$(fedora_refs)" ]]; then
     for remote in fedora fedora-testing; do
@@ -60,8 +85,22 @@ else
     echo "Some refs still come from Fedora's remote; leaving it in place."
 fi
 
+# One by one, so a single failure doesn't block the others.
 # --or-update: no error if an app is already installed (e.g. migrated above)
-flatpak install --system --noninteractive --assumeyes --or-update flathub "${DEFAULT_APPS[@]}"
+for app in "${DEFAULT_APPS[@]}"; do
+    "${FP[@]}" install --or-update flathub "${app}" || failed+=("${app}")
+done
 
-mkdir -p "$(dirname "${STAMP}")"
+mkdir -p "${STATE}"
+if (( ${#failed[@]} )); then
+    runs=$(( $(cat "${RUNS}" 2>/dev/null || echo 0) + 1 ))
+    echo "${runs}" > "${RUNS}"
+    echo "Failed (run ${runs}/${MAX_RUNS}): ${failed[*]}"
+    if (( runs < MAX_RUNS )); then
+        exit 1
+    fi
+    echo "Giving up on: ${failed[*]} (install them manually, e.g. in GNOME Software)"
+fi
+
+rm -f "${RUNS}"
 touch "${STAMP}"
