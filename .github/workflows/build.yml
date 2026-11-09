@@ -91,11 +91,23 @@ jobs:
       - name: Push
         id: push
         if: github.event_name != 'pull_request'
+        # GHCR sporadically rejects blob uploads ("unauthenticated: User
+        # cannot be authenticated with the token provided"), so log in again
+        # and retry. Layers that already made it are skipped on the retry.
         run: |
           IMAGE="${{ steps.meta.outputs.image }}"
           for tag in ${{ steps.meta.outputs.tags }}; do
             sudo podman tag "${IMAGE}:chunked" "${IMAGE}:${tag}"
-            sudo podman push --digestfile /tmp/digest "${IMAGE}:${tag}"
+            for attempt in 1 2 3; do
+              sudo podman push --digestfile /tmp/digest "${IMAGE}:${tag}" && break
+              if [ "${attempt}" -eq 3 ]; then
+                echo "::error::Pushing ${tag} failed 3 times"; exit 1
+              fi
+              echo "::warning::Push of ${tag} failed (attempt ${attempt}), retrying in 30s"
+              sleep 30
+              echo "${{ secrets.GITHUB_TOKEN }}" | \
+                sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+            done
           done
           echo "digest=$(cat /tmp/digest)" >> "$GITHUB_OUTPUT"
 
