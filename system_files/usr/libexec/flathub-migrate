@@ -6,15 +6,19 @@
 #  3. remove the Fedora runtime and the Fedora remotes
 #  4. install a few default apps from Flathub (only once; uninstalling
 #     them later is respected)
-# No network yet -> exit non-zero, systemd retries every minute.
-# Single apps that fail don't stop the rest; the run is retried a few
-# times (MAX_RUNS), then the failures are logged and the migration ends.
+# Flathub not reachable -> exit non-zero, systemd retries every minute;
+# these runs don't count. Single apps that fail don't stop the rest; runs
+# with failures are retried up to MAX_RUNS times, then the failures are
+# logged and the migration ends.
 # Fedora's remote is only removed once nothing installed depends on it.
 set -euo pipefail
 
 STATE=/var/lib/silverblue-plus
 STAMP="${STATE}/flathub-migrate.done"
 RUNS="${STATE}/flathub-migrate.runs"
+# Apps already uninstalled from Fedora's remote but not yet installed from
+# Flathub (e.g. the download failed). Retried on every run until installed.
+PENDING="${STATE}/flathub-migrate.pending"
 MAX_RUNS=5
 
 # Default Flathub apps installed on first boot
@@ -31,13 +35,29 @@ DEFAULT_APPS=(
 
 FP=(flatpak --system --noninteractive --assumeyes)
 
+# Real request to Flathub. Needed because flatpak's own errors look the
+# same offline and for refs that don't exist ("No such ref").
+online() {
+    curl -fsS -o /dev/null --head --max-time 20 https://dl.flathub.org/repo/summary.idx
+}
+retry_later() {
+    echo "Flathub is not reachable (offline?); retrying later"
+    exit 1
+}
+
+pending_add() { mkdir -p "${STATE}"; echo "$1" >> "${PENDING}"; }
+pending_del() {
+    [[ -e "${PENDING}" ]] || return 0
+    grep -vxF "$1" "${PENDING}" > "${PENDING}.tmp" || true
+    mv "${PENDING}.tmp" "${PENDING}"
+}
+
+online || retry_later
+
 flatpak remote-add --system --if-not-exists flathub \
     https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak remote-modify --system --enable flathub
-
-# Fails without network, so we never misread "offline" as "not on Flathub".
-# Offline runs don't count towards MAX_RUNS.
-flatpak update --system --appstream flathub
+flatpak update --system --appstream flathub || retry_later
 
 fedora_refs() {
     flatpak list --system --columns=application,origin "$@" \
@@ -47,29 +67,59 @@ fedora_refs() {
 failed=()
 keep_fedora=0
 
+# Leftovers from an earlier run: already gone from Fedora, install them now
+if [[ -s "${PENDING}" ]]; then
+    mapfile -t pending_apps < "${PENDING}"
+    for app in "${pending_apps[@]}"; do
+        [[ -z "${app}" ]] && continue
+        echo "Installing ${app} from Flathub (left over from an earlier run)"
+        if "${FP[@]}" install --or-update flathub "${app}"; then
+            pending_del "${app}"
+        else
+            failed+=("${app}")
+        fi
+    done
+fi
+
 mapfile -t fedora_apps < <(fedora_refs --app)
 for app in "${fedora_apps[@]}"; do
     [[ -z "${app}" ]] && continue
-    if ! flatpak remote-info --system flathub "app/${app}/x86_64/stable" >/dev/null 2>&1; then
+    if ! info="$(flatpak remote-info --system flathub "app/${app}/x86_64/stable" 2>/dev/null)"; then
+        online || retry_later
         echo "${app} is not on Flathub, keeping the Fedora build"
         keep_fedora=1
         continue
     fi
+    echo "Moving ${app} from Fedora's remote to Flathub"
+
+    # Download the runtime first (the big part). If that fails, the Fedora
+    # build is still untouched. The app itself can't be downloaded ahead:
+    # flatpak refuses while it's installed from another remote.
+    runtime="$(awk '/^ *Runtime:/ {print $2}' <<< "${info}")"
+    if [[ -n "${runtime}" ]] && \
+       ! "${FP[@]}" install --or-update flathub "runtime/${runtime}"; then
+        echo "Downloading ${runtime} failed, keeping the Fedora build of ${app} for now"
+        failed+=("${app}")
+        keep_fedora=1
+        continue
+    fi
+
     # Uninstall + install, not --reinstall: flatpak refuses to switch when
     # Flathub's build is older than Fedora's ("Update is older than current
     # version"). Uninstalling without --delete-data keeps ~/.var/app.
-    echo "Moving ${app} from Fedora's remote to Flathub"
-    origin="$(flatpak info --system --show-origin "${app}")"
     if ! "${FP[@]}" uninstall "${app}"; then
         failed+=("${app}")
         keep_fedora=1
         continue
     fi
-    if ! "${FP[@]}" install flathub "${app}"; then
-        echo "Installing ${app} from Flathub failed, restoring the Fedora build"
-        "${FP[@]}" install "${origin}" "${app}" || true
+    # Restoring from Fedora's remote isn't possible here (it needs a desktop
+    # session), so a failed install is remembered and retried instead.
+    pending_add "${app}"
+    if "${FP[@]}" install flathub "${app}"; then
+        pending_del "${app}"
+    else
+        echo "Installing ${app} from Flathub failed, will retry"
         failed+=("${app}")
-        keep_fedora=1
     fi
 done
 
@@ -93,6 +143,8 @@ done
 
 mkdir -p "${STATE}"
 if (( ${#failed[@]} )); then
+    # Failures caused by the network going away don't count
+    online || retry_later
     runs=$(( $(cat "${RUNS}" 2>/dev/null || echo 0) + 1 ))
     echo "${runs}" > "${RUNS}"
     echo "Failed (run ${runs}/${MAX_RUNS}): ${failed[*]}"
@@ -102,5 +154,5 @@ if (( ${#failed[@]} )); then
     echo "Giving up on: ${failed[*]} (install them manually, e.g. in GNOME Software)"
 fi
 
-rm -f "${RUNS}"
+rm -f "${RUNS}" "${PENDING}"
 touch "${STAMP}"

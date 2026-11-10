@@ -55,9 +55,11 @@ LibreOffice, …) on the system as Flatpaks from Fedora's remote.
    Faugus Launcher and Warehouse from Flathub,
 5. writes `/var/lib/silverblue-plus/flathub-migrate.done` and never runs again.
 
-While offline it retries every minute. If single apps fail to install, the
-others still go ahead; the run is retried up to 5 times, then the failed apps
-are listed in the log and the migration ends. If an app is not on Flathub (or
+While Flathub isn't reachable it retries every minute. If single apps fail to
+install, the others still go ahead; the run is retried up to 5 times, then the
+failed apps are listed in the log and the migration ends. Each app's runtime
+is downloaded before the Fedora build is removed, and an app whose Flathub
+install fails afterwards is retried on the next run. If an app is not on Flathub (or
 can't be installed from there), the Fedora build and remote are kept. Check
 progress with `journalctl -u flathub-migrate`. When GNOME's first-boot setup
 asks about third-party repositories, choose **Enable** so Flathub stays
